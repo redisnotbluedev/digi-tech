@@ -1,2 +1,2 @@
-# digi-tech
+# Digital Tech
 My code for Digital Technologies.
