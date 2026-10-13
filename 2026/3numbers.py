@@ -1,0 +1,1 @@
+print(f"Average: {sum(numbers := [float(input(f"Number {n + 1}: ")) for n in range(3)]) / len(numbers)}\nMax: {numbers[0] if numbers[0] >= numbers[1] and numbers[0] >= numbers[2] else (numbers[1] if numbers[1] >= numbers[2] and numbers[1] >= numbers[0] else numbers[2])}")
