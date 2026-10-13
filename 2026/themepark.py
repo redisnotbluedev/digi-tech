@@ -1,0 +1,1 @@
+print(f"Total: {(float(tickets * (price := float(input("What is the price per ticket? ")))) - tickets * price * 0.1) * 1.1}\nDiscount: {tickets * price * 0.1}" if (tickets := int(input("How many tickets would you like to buy? "))) > 5 else f"Total: {tickets * (price := float(input("What is the price per ticket? ")))}\nDiscount: 0")
