@@ -9,11 +9,16 @@ import random, sys
 TEXT_OPTIONS = {
 	"messages": {
 		"hi": ["Welcome to the Travel Cost Calculator! Would you like to plan your trip?"],
-		"bye": ["Goodbye.", "See you.", "Farewell!", "Have a nice day.", "Maybe next time."]
+		"bye": ["Goodbye.", "See you.", "Farewell!", "Have a nice day.", "Maybe next time."],
+		"destination": {
+			"opener": ["Let's start with destination."],
+			"interstate": ["Would you like to go overseas?"]
+		}
 	}
 }
 
 def ask_user(prompt, options):
+	options = options.lower()
 	ask = lambda: input(prompt + f" [{"/".join(options)}]{"" if prompt.endswith("?") or prompt.endswith(":") else ":"} ")
 	response = ask()
 	while response.lower() not in options and options != []:
@@ -41,3 +46,5 @@ print()
 if ask_user(random_traverse("messages.hi"), ["y", "n"]) == "n":
 	print(random_traverse("messages.bye"))
 	sys.exit()
+
+print(random_traverse("messages.destination.opener"))
