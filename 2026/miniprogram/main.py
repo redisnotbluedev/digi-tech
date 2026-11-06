@@ -4,7 +4,7 @@
 A calculator. For travel cost... Yeah.
 """
 
-import random, sys
+import random, sys, fast_flights
 
 TEXT_OPTIONS = {
 	"messages": {
@@ -12,13 +12,12 @@ TEXT_OPTIONS = {
 		"bye": ["Goodbye.", "See you.", "Farewell!", "Have a nice day.", "Maybe next time."],
 		"destination": {
 			"opener": ["Let's start with destination."],
-			"interstate": ["Would you like to go overseas?"]
+			"plane": ["Do you plan on taking a plane to your destination?"]
 		}
 	}
 }
 
 def ask_user(prompt, options):
-	options = options.lower()
 	ask = lambda: input(prompt + f" [{"/".join(options)}]{"" if prompt.endswith("?") or prompt.endswith(":") else ":"} ")
 	response = ask()
 	while response.lower() not in options and options != []:
@@ -43,8 +42,10 @@ print("=" * 49)
 print(" " * 11 + "TRAVEL COST CALCULATOR!!!!!")
 print("=" * 49)
 print()
-if ask_user(random_traverse("messages.hi"), ["y", "n"]) == "n":
+if ask_user(random_traverse("messages.hi"), ["y", "n"]).lower() == "n":
 	print(random_traverse("messages.bye"))
 	sys.exit()
 
 print(random_traverse("messages.destination.opener"))
+if ask_user(random_traverse("messages.destination.plane"), ["y", "n"]).lower() == "y":
+	pass
