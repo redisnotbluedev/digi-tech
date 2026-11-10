@@ -30,14 +30,15 @@ TEXT_OPTIONS = {
 			"opener": ["Now, the destination."],
 			"plane": ["Do you plan on taking a plane to your destination?"],
 			"location": ["Where would you like to travel to? The more specific, the better."],
-			"airport": ["You will be arriving at {} ({})."],
 			"time": ["What time will you be leaving? (YYYY-MM-DD)"]
 		},
-		"confirm": ["Did you mean {}?"]
+		"confirm": ["Did you mean {}?"],
+		"airports": ["Closest airports:\n{}\nWhich airport would you like to choose?"],
+		"origin": ["Where are you leaving from?"]
 	},
 	"errors": {
 		"download": ["Sorry, an error occured while downloading data."],
-		"geocode": ["Sorry, an error occured when accessing location data."]
+		"geocode": ["Sorry, something went wrong understanding your location, please try again."]
 	}
 }
 AIRPORTS = pathlib.Path(__file__).parent / "airports.csv"
@@ -108,7 +109,7 @@ def geocode(location: str, retries: int = 0):
 
 	return []
 
-def haversine_distance(lat1, lon1, lat2, lon2):
+def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float):
 	"""
 	Calculates the true great-circle distance between two points on Earth in kilometres.
 	Remains accurate to approximately 0.5km, due to difference between polar and equatorial radius of the Earth.
@@ -122,6 +123,20 @@ def haversine_distance(lat1, lon1, lat2, lon2):
 	c = 2 * math.asin(math.sqrt(a))
 
 	return EARTH_RADIUS * c
+
+def choose_airport(lat: float, lon: float):
+	"""
+	Locate the three closest medium or large airports and prompt the user to make a decision
+	out of the three, presenting necessary data to aid the user's decision in the process.
+	"""
+	options = sorted(
+		[a for a in airports if a.get("type") in ("medium_airport", "large_airport") and a.get("scheduled_service") == "yes" and a.get("name")],
+		key=lambda n: haversine_distance(lat, lon, float(n["latitude_deg"]), float(n["longitude_deg"]))
+	)[:3]
+	return options[int(ask_user(random_traverse("messages.airports").format("\n".join([
+		f" {options.index(a) + 1}. {a["name"]} ({a["type"].replace("_", " ").title()})"
+		for a in options
+	])), [str(n) for n in range(1, 4)])) - 1]
 
 print("=" * 49)
 print(" " * 11 + "TRAVEL COST CALCULATOR!!!!!")
@@ -174,18 +189,23 @@ if ask_user(random_traverse("messages.destination.plane"), ["y", "n"]).lower() =
 		locations = geocode(ask_user(random_traverse("messages.destination.location")))
 
 	location = locations[0]
-	airport = min(
-		[a for a in airports if a.get("type") in ("medium_airport", "large_airport") and a.get("scheduled_service") == "yes"],
-		key=lambda n: haversine_distance(
-			float(location["lat"]),
-			float(location["lon"]),
-			float(n["latitude_deg"]),
-			float(n["longitude_deg"])
-		)
-	)
-	print(random_traverse("messages.destination.airport").format(airport["name"], airport["iata_code"]))
+	destination = choose_airport(float(location["lat"]), float(location["lon"]))
 
-	# date = ask_user(random_traverse("messages.destination.time"))
+	locations = geocode(ask_user(random_traverse("messages.origin")))
+	while True:
+		if locations:
+			if ask_user(random_traverse("messages.confirm").format(locations[0]["display_name"]), ["y", "n"]) == "y":
+				break
+		else:
+			print(random_traverse("errors.geocode"))
+
+		locations = geocode(ask_user(random_traverse("messages.destination.location")))
+
+	location = locations[0]
+	origin = choose_airport(float(location["lat"]), float(location["lon"]))
+
+	date = ask_user(random_traverse("messages.destination.time"))
+
 	# fast_flights.create_query(
 	# 	flights=[fast_flights.FlightQuery(
 	# 		date=date,
