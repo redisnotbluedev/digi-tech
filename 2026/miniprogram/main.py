@@ -20,11 +20,17 @@ TEXT_OPTIONS = {
 		"download": ["Downloading data..."],
 		"hi": ["Welcome to the Travel Cost Calculator! Would you like to plan your trip?"],
 		"bye": ["Goodbye.", "See you.", "Farewell!", "Have a nice day.", "Maybe next time."],
-		"people": {
-			"opener": ["Let's start with the people going on your trip."],
-			"adults": ["How many adults?"],
-			"children": ["How many children?"],
-			"infants": ["How many infants?"]
+		"flight": {
+			"people": {
+				"opener": ["Let's start with the people going on your trip."],
+				"adults": ["How many adults?"],
+				"children": ["How many children?"],
+				"infants_in_seat": ["How many infants (in-seat)?"],
+				"infants_on_lap": ["How many infants (in-lap)?"]
+			},
+			"seat": ["Which cabin class would you like to fly in?"],
+			"bags": ["How many carry-on bags?"],
+			"checked": ["How many checked-in bags?"]
 		},
 		"destination": {
 			"opener": ["Now, the destination."],
@@ -38,7 +44,9 @@ TEXT_OPTIONS = {
 	},
 	"errors": {
 		"download": ["Sorry, an error occured while downloading data."],
-		"geocode": ["Sorry, something went wrong understanding your location, please try again."]
+		"geocode": ["Sorry, something went wrong understanding your location, please try again."],
+		"people": ["Sorry, only booking for up to ten passengers is supported."],
+		"infants": ["There must be at least as many adults as infants on laps."]
 	}
 }
 AIRPORTS = pathlib.Path(__file__).parent / "airports.csv"
@@ -134,7 +142,7 @@ def choose_airport(lat: float, lon: float):
 		key=lambda n: haversine_distance(lat, lon, float(n["latitude_deg"]), float(n["longitude_deg"]))
 	)[:3]
 	return options[int(ask_user(random_traverse("messages.airports").format("\n".join([
-		f" {options.index(a) + 1}. {a["name"]} ({a["type"].replace("_", " ").title()})"
+		f" {options.index(a) + 1}. {a["name"]} ({a["iata_code"]} - {a["type"].replace("_", " ").title()})"
 		for a in options
 	])), [str(n) for n in range(1, 4)])) - 1]
 
@@ -164,17 +172,30 @@ if ask_user(random_traverse("messages.hi"), ["y", "n"]).lower() == "n":
 	print(random_traverse("messages.bye"))
 	sys.exit()
 
-print(random_traverse("messages.people.opener"))
-people = {}
-for n in ["adults", "infants", "children"]:
-	while True:
-		try:
-			people[n] = int(ask_user(random_traverse(f"messages.people.{n}")))
-			if people[n] < 0:
-				raise ValueError
-			break
-		except ValueError:
-			pass
+print(random_traverse("messages.flight.people.opener"))
+while True:
+	people = {}
+	total = 0
+	for n in ["adults", "infants_in_seat", "infants_on_lap", "children"]:
+		while True:
+			try:
+				people[n] = int(ask_user(random_traverse(f"messages.flight.people.{n}")))
+				if people[n] < 0:
+					raise ValueError
+				total += people[n]
+				break
+			except ValueError:
+				pass
+
+	if sum(people.values()) > 9:
+		print(random_traverse("errors.people"))
+		continue
+
+	if people["infants_in_seat"] > people["adults"]:
+		print(random_traverse("errors.infants"))
+		continue
+
+	break
 
 print(random_traverse("messages.destination.opener"))
 if ask_user(random_traverse("messages.destination.plane"), ["y", "n"]).lower() == "y":
@@ -206,10 +227,15 @@ if ask_user(random_traverse("messages.destination.plane"), ["y", "n"]).lower() =
 
 	date = ask_user(random_traverse("messages.destination.time"))
 
-	# fast_flights.create_query(
-	# 	flights=[fast_flights.FlightQuery(
-	# 		date=date,
-	# 		from_airport=departure,
-	# 		to_airport=destination
-	# 	)]
-	# )
+	seat = ask_user(random_traverse("messages.flight.seat"), ["business", "economy", "first", "premium"]).replace("premium", "premium_economy")
+	query = fast_flights.create_query(
+		flights=[fast_flights.FlightQuery(
+			date=date,
+			from_airport=origin["iata_code"],
+			to_airport=destination["iata_code"]
+		)],
+		seat=seat, # ty: ignore[invalid-argument-type]
+		trip="round-trip",
+		passengers=fast_flights.Passengers(**people)
+	)
+	print(fast_flights.get_flights(query))
