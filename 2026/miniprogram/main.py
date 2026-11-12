@@ -5,6 +5,7 @@ A calculator. For travel cost... Yeah.
 """
 
 import csv
+import datetime
 import json
 import math
 import pathlib
@@ -13,6 +14,7 @@ import sys
 import time
 
 import fast_flights
+from fast_flights.model import Flights, SingleFlight, Airport, SimpleDatetime, CarbonEmission
 import requests
 
 TEXT_OPTIONS = {
@@ -36,8 +38,9 @@ TEXT_OPTIONS = {
 			"opener": ["Now, the destination."],
 			"plane": ["Do you plan on taking a plane to your destination?"],
 			"location": ["Where would you like to travel to? The more specific, the better."],
-			"time": ["What time will you be leaving? (YYYY-MM-DD)"]
 		},
+		"leave": ["What is your departure date?"],
+		"return": ["What is your return date?"],
 		"confirm": ["Did you mean {}?"],
 		"airports": ["Closest airports:\n{}\nWhich airport would you like to choose?"],
 		"origin": ["Where are you leaving from?"]
@@ -46,7 +49,8 @@ TEXT_OPTIONS = {
 		"download": ["Sorry, an error occured while downloading data."],
 		"geocode": ["Sorry, something went wrong understanding your location, please try again."],
 		"people": ["Sorry, only booking for up to ten passengers is supported."],
-		"infants": ["There must be at least as many adults as infants on laps."]
+		"infants": ["There must be at least as many adults as infants on laps."],
+		"flights": ["Sorry, we couldn't find any flights for your constraints. Please try again later."]
 	}
 }
 AIRPORTS = pathlib.Path(__file__).parent / "airports.csv"
@@ -87,7 +91,7 @@ def random_traverse(key: str):
 		return random.choice(current)
 	return current
 
-def geocode(location: str, retries: int = 0):
+def geocode(location: str, retries: int = 0) -> list[dict]:
 	"""
 	Find an OpenStreetMap object based on a location string, based on the free Nominatim service.
 	"""
@@ -117,7 +121,7 @@ def geocode(location: str, retries: int = 0):
 
 	return []
 
-def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float):
+def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 	"""
 	Calculates the true great-circle distance between two points on Earth in kilometres.
 	Remains accurate to approximately 0.5km, due to difference between polar and equatorial radius of the Earth.
@@ -132,19 +136,52 @@ def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float):
 
 	return EARTH_RADIUS * c
 
-def choose_airport(lat: float, lon: float):
+def choose_airport(lat: float, lon: float) -> dict:
 	"""
 	Locate the three closest medium or large airports and prompt the user to make a decision
 	out of the three, presenting necessary data to aid the user's decision in the process.
 	"""
 	options = sorted(
-		[a for a in airports if a.get("type") in ("medium_airport", "large_airport") and a.get("scheduled_service") == "yes" and a.get("name")],
-		key=lambda n: haversine_distance(lat, lon, float(n["latitude_deg"]), float(n["longitude_deg"]))
+		[
+			a | {"distance": haversine_distance(lat, lon, float(a["latitude_deg"]), float(a["longitude_deg"]))}
+			for a in airports if a.get("type") in ("medium_airport", "large_airport") and a.get("scheduled_service") == "yes" and a.get("name") and a.get("iata_code")
+		],
+		key=lambda a: a["distance"]
 	)[:3]
+	if options[0]["distance"] <= 1: # ty: ignore[unsupported-operator]
+		return options[0]
 	return options[int(ask_user(random_traverse("messages.airports").format("\n".join([
-		f" {options.index(a) + 1}. {a["name"]} ({a["iata_code"]} - {a["type"].replace("_", " ").title()})"
+		f" {options.index(a) + 1}. {a["name"]} ({a["iata_code"]} - {a["type"].replace("_", " ").title()})" # ty: ignore[unresolved-attribute]
 		for a in options
 	])), [str(n) for n in range(1, 4)])) - 1]
+
+def parse_date(date: str) -> str | None:
+	sep = ["/", ".", "-", " "]
+	dt = None
+	for s in sep:
+		try:
+			dt = datetime.datetime.strptime(date, f"%Y{s}%m{s}%d")
+			break
+		except ValueError:
+			pass
+
+	if dt:
+		return datetime.datetime.strftime(dt, "%Y/%m/%d")
+	return None
+
+def serialise_flight(flight: Flights):
+	"""Convert a Flights object into a string."""
+	data = []
+	data.append(f"${flight.price} USD • {flight.carbon.emission // 1000}kg carbon emission • {sum([s.duration for s in flight.flights]) / len(flight.flights)} mins average duration")
+	for f in flight.flights:
+		single = []
+		single.append("/".join([str(n) for n in f.departure.date]))
+		single.append(":".join([str(n) for n in f.departure.time]))
+		single.append(f"{f.from_airport.code} → {f.to_airport.code}")
+		single.append("/".join([str(n) for n in f.arrival.date]))
+		single.append(":".join([str(n) for n in f.arrival.time]))
+		data.append("    " + " ".join(single))
+	return "\n".join(data)
 
 print("=" * 49)
 print(" " * 11 + "TRAVEL COST CALCULATOR!!!!!")
@@ -220,22 +257,63 @@ if ask_user(random_traverse("messages.destination.plane"), ["y", "n"]).lower() =
 		else:
 			print(random_traverse("errors.geocode"))
 
-		locations = geocode(ask_user(random_traverse("messages.destination.location")))
+		locations = geocode(ask_user(random_traverse("messages.origin")))
 
 	location = locations[0]
 	origin = choose_airport(float(location["lat"]), float(location["lon"]))
 
-	date = ask_user(random_traverse("messages.destination.time"))
+	while True:
+		go = parse_date(ask_user(random_traverse("messages.leave")))
+		if go is not None:
+			break
 
-	seat = ask_user(random_traverse("messages.flight.seat"), ["business", "economy", "first", "premium"]).replace("premium", "premium_economy")
+	while True:
+		back = parse_date(ask_user(random_traverse("messages.return")))
+		if back is not None:
+			break
+
+	while True:
+		try:
+			bags = int(ask_user(random_traverse("messages.flight.bags")))
+			break
+		except ValueError:
+			pass
+
+	while True:
+		try:
+			checked = int(ask_user(random_traverse("messages.flight.checked")))
+			break
+		except ValueError:
+			pass
+
+	seat = ask_user(random_traverse("messages.flight.seat"), ["economy", "premium", "business"]).replace("premium", "premium-economy")
 	query = fast_flights.create_query(
-		flights=[fast_flights.FlightQuery(
-			date=date,
-			from_airport=origin["iata_code"],
-			to_airport=destination["iata_code"]
-		)],
+		flights=[
+			fast_flights.FlightQuery(
+				date=go,
+				from_airport=origin["iata_code"],
+				to_airport=destination["iata_code"]
+			),
+			fast_flights.FlightQuery(
+				date=back,
+				from_airport=destination["iata_code"],
+				to_airport=origin["iata_code"]
+			)
+		],
 		seat=seat, # ty: ignore[invalid-argument-type]
 		trip="round-trip",
-		passengers=fast_flights.Passengers(**people)
+		passengers=fast_flights.Passengers(**people),
+		carry_on_bags=bags,
+		checked_bags=checked
 	)
-	print(fast_flights.get_flights(query))
+
+	try:
+		flights = []
+		for f in fast_flights.get_flights(query):
+			id = "|".join([str(f.price), str(f.carbon.emission), str(sum([s.duration for s in f.flights]) / len(f.flights))])
+			if id not in flights:
+				print(serialise_flight(f))
+				flights.append(id)
+	except Exception:
+		raise
+		# print(random_traverse("errors.flights"))
