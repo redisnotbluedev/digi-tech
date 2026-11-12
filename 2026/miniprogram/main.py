@@ -166,13 +166,13 @@ def parse_date(date: str) -> str | None:
 			pass
 
 	if dt:
-		return datetime.datetime.strftime(dt, "%Y/%m/%d")
+		return datetime.datetime.strftime(dt, "%Y-%m-%d")
 	return None
 
 def serialise_flight(flight: Flights):
 	"""Convert a Flights object into a string."""
 	data = []
-	data.append(f"${flight.price} USD • {flight.carbon.emission // 1000}kg carbon emission • {sum([s.duration for s in flight.flights]) / len(flight.flights)} mins average duration")
+	data.append(f"${flight.price} USD • {flight.carbon.emission // 1000}kg carbon emission • {sum([s.duration for s in flight.flights]) / len(flight.flights):.2f} mins average duration")
 	for f in flight.flights:
 		single = []
 		single.append("/".join([str(n) for n in f.departure.date]))
