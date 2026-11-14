@@ -98,7 +98,7 @@ def geocode(location: str, retries: int = 0) -> list[dict]:
 	global last_nominatim
 
 	elapsed = time.monotonic() - last_nominatim
-	buffer = 1.1 + (2 ** retries if retries > 0 else 0)
+	buffer = 1.1 + (2**retries if retries > 0 else 0)
 	if elapsed < buffer:
 		time.sleep(buffer - elapsed)
 	last_nominatim = time.monotonic()
@@ -156,6 +156,7 @@ def choose_airport(lat: float, lon: float) -> dict:
 	])), [str(n) for n in range(1, 4)])) - 1]
 
 def parse_date(date: str) -> str | None:
+	"""Robustly parse a date and convert it into YYYY-MM-DD format."""
 	sep = ["/", ".", "-", " "]
 	dt = None
 	for s in sep:
@@ -171,15 +172,16 @@ def parse_date(date: str) -> str | None:
 
 def serialise_flight(flight: Flights):
 	"""Convert a Flights object into a string."""
+	time = lambda x: f"{x.time[0]}:{x.time[1]:02d}"
 	data = []
-	data.append(f"${flight.price} USD • {flight.carbon.emission // 1000}kg carbon emission • {sum([s.duration for s in flight.flights]) / len(flight.flights):.2f} mins average duration")
+	data.append(f"${flight.price} USD • {flight.carbon.emission // 1000}kg carbon emission • {sum([s.duration for s in flight.flights]) / len(flight.flights):.2f} mins average flight")
 	for f in flight.flights:
 		single = []
 		single.append("/".join([str(n) for n in f.departure.date]))
-		single.append(":".join([str(n) for n in f.departure.time]))
+		single.append(time(f.departure))
 		single.append(f"{f.from_airport.code} → {f.to_airport.code}")
 		single.append("/".join([str(n) for n in f.arrival.date]))
-		single.append(":".join([str(n) for n in f.arrival.time]))
+		single.append(time(f.arrival))
 		data.append("    " + " ".join(single))
 	return "\n".join(data)
 
@@ -307,13 +309,19 @@ if ask_user(random_traverse("messages.destination.plane"), ["y", "n"]).lower() =
 		checked_bags=checked
 	)
 
-	try:
-		flights = []
-		for f in fast_flights.get_flights(query):
-			id = "|".join([str(f.price), str(f.carbon.emission), str(sum([s.duration for s in f.flights]) / len(f.flights))])
-			if id not in flights:
-				print(serialise_flight(f))
-				flights.append(id)
-	except Exception:
-		raise
-		# print(random_traverse("errors.flights"))
+	for n in range(1, 3):
+		try:
+			data = fast_flights.get_flights(query)
+			break
+		except Exception:
+			time.sleep(2**n)
+	else:
+		print(random_traverse("errors.flights"))
+		sys.exit()
+
+	flights = []
+	for f in data:
+		id = "|".join([str(f.price), str(f.carbon.emission), str(sum([s.duration for s in f.flights]) / len(f.flights))])
+		if id not in flights:
+			print(serialise_flight(f))
+			flights.append(id)
