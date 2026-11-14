@@ -14,7 +14,7 @@ import sys
 import time
 
 import fast_flights
-from fast_flights.model import Flights, SingleFlight, Airport, SimpleDatetime, CarbonEmission
+from fast_flights.model import Flights
 import requests
 
 TEXT_OPTIONS = {
@@ -172,16 +172,16 @@ def parse_date(date: str) -> str | None:
 
 def serialise_flight(flight: Flights):
 	"""Convert a Flights object into a string."""
-	time = lambda x: f"{x.time[0]}:{x.time[1]:02d}"
+	t = lambda x: f"{x.time[0]}:{x.time[1]:02d}"
 	data = []
 	data.append(f"${flight.price} USD • {flight.carbon.emission // 1000}kg carbon emission • {sum([s.duration for s in flight.flights]) / len(flight.flights):.2f} mins average flight")
 	for f in flight.flights:
 		single = []
 		single.append("/".join([str(n) for n in f.departure.date]))
-		single.append(time(f.departure))
+		single.append(t(f.departure))
 		single.append(f"{f.from_airport.code} → {f.to_airport.code}")
 		single.append("/".join([str(n) for n in f.arrival.date]))
-		single.append(time(f.arrival))
+		single.append(t(f.arrival))
 		data.append("    " + " ".join(single))
 	return "\n".join(data)
 
